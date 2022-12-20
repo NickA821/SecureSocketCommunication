@@ -201,10 +201,10 @@ def send(ip_address):
             user_input = 'Y'
             while user_input == 'Y':
                 msg = get_message()
-                encrypted_msg = encrypt_message(msg)
+                encrypted_msg = encrypt_message(msg, 0)
                 sock.sendall(encrypted_msg)
                 data = sock.recv(1024)
-                decrypted_data = decrypt_message(data)
+                decrypted_data = decrypt_message(data, 0)
                 if decrypted_data == "#<<END>>#":
                     user_input = False
                     print("\nMessage sent successfully.")
@@ -271,7 +271,6 @@ def decrypt_aes_key_with_rsa(prv_key_name):
         with open(dest_name, "wb") as f:
             f.write(decrypted_key)
 
-why hello there!!!
 # RECEIVE
 def receive(ip_address):
     
@@ -296,7 +295,7 @@ def receive(ip_address):
         print("\nMessage: ")
 
         user_input = 'Y'
-        decrypted_data = decrypt_message(conn.recv(1024))
+        decrypted_data = decrypt_message(conn.recv(1024), 1)
         if decrypted_data == "#<<END>>#":
             user_input = 'N'
             conn.sendall("#<<END>>#".encode())
@@ -306,8 +305,8 @@ def receive(ip_address):
                 user_input = input("Respond(Y/N): ")
                 if user_input == 'Y':
                     msg = get_message()
-                    conn.sendall(encrypt_message(msg))
-                    decrypted_data = decrypt_message(conn.recv(1024))
+                    conn.sendall(encrypt_message(msg, 1))
+                    decrypted_data = decrypt_message(conn.recv(1024), 1)
                     if decrypted_data == "#<<END>>#":
                         user_input = 'N'
                         conn.sendall("#<<END>>#".encode())
@@ -359,9 +358,12 @@ def send_aes_key(conn):
 
 
 # MESSAGE MANIPULATION
-def encrypt_message(data):
+def encrypt_message(data, side):
     # read AES key
-    aes_name = './shared_keys/decrypted_key.aes'
+    if side == 0:
+        aes_name = './shared_keys/decrypted_key.aes'
+    else:
+        aes_name = './shared_keys/my_key.aes'
     r = open(aes_name, "rb")
     key = r.read()
 
@@ -373,10 +375,13 @@ def encrypt_message(data):
     return hash_obj.digest() + cipher.iv + cipher_text
 
 
-def decrypt_message(data):
+def decrypt_message(data, side):
     hash_size = 48
     # check if file exists
-    aes_name = './shared_keys/decrypted_key.aes'
+    if side == 0:
+        aes_name = './shared_keys/decrypted_key.aes'
+    else:
+        aes_name = './shared_keys/my_key.aes'
     # read aes key
     with open(aes_name, "rb") as r:
         key = r.read()
