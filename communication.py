@@ -3,11 +3,14 @@ from Crypto.Hash import SHA256
 import socket
 from Crypto.Random import get_random_bytes
 import ipaddress
-from base64 import b64encode
+from base64 import b64decode, b64encode
 import os
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
+import json
+from base64 import b64encode
+
 ##
 # Authors: Nick Buchanan and Josh Vancleave 
 # Version: Fall 2022
@@ -221,12 +224,7 @@ def send(ip_address):
         print("\nMessage sending error. Connection has been refused")  
     #except OSError: 
             #print("\nError: IP Address could not be resolved")
-        
-    except socket.timeout: #catches if the timeout() method timed out
-        print("\nMessage sending error. Message not sent. (Timed Out)")
-    except ConnectionRefusedError: #catches if the connection was refused
-        print("\nMessage sending error. Connection has been refused")
-
+            
 # SEND HELPER FUNCS
 def sendPublicKey(ip_address, sock, pub_key_name):
 
@@ -367,13 +365,14 @@ def encrypt_message(data, side):
     r = open(aes_name, "rb")
     key = r.read()
 
-    hash_obj = SHA256.new(data.encode())
-    
-    iv = os.urandom(16)
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    cipher_text = cipher.encrypt(pad(data.encode(), AES.block_size))
-    return hash_obj.digest() + cipher.iv + cipher_text
+    cipher = AES.new(key, AES.MODE_EAX)
 
+    ciphertext, tag = cipher.encrypt_and_digest(data)
+
+    json_k = [ 'nonce', 'ciphertext', 'tag' ]
+    json_v = [ b64encode(x).decode('utf-8') for x in (cipher.nonce, ciphertext, tag) ]
+    result = json.dumps(dict(zip(json_k, json_v)))
+    return result.encode()
 
 def decrypt_message(data, side):
     hash_size = 48
@@ -387,15 +386,15 @@ def decrypt_message(data, side):
         key = r.read()
 
     # create decryption cipher and initialization vector
-    iv = os.urandom(16)
-    if data != '#<<END>>#'.encode():
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        plain_encoded_text = unpad(cipher.decrypt(data), AES.block_size)
-        plain_text = plain_encoded_text.decode('latin-1');
-        return plain_text[hash_size:]
-    else:
-        plain_encoded_text = data.decode('utf-8')
-        return plain_encoded_text
+    try:
+        b64 = json.loads(data.decode())
+        json_k = [ 'nonce', 'ciphertext', 'tag' ]
+        jv = {k:b64decode(b64[k]) for k in json_k}
+        cipher = AES.new(key, AES.MODE_EAX, nonce=jv['nonce'])
+        plaintext = cipher.decrypt_and_verify(jv['ciphertext'], jv['tag'])
+        return plaintext.decode('utf-8')
+    except:
+        return "#<<END>>#"
     
  
  
@@ -417,10 +416,10 @@ def get_message():
         #ensures that message is a maximum of 4096 characters
         if len(message) <= MESSAGE_CHARS_MAX:
             done = True
+            message = message.encode()
         #if it is greater than 4096 characters, the user is asked again
         else:
             print("Error: Message is over 4096 bits")
-        
     return message
 
 
